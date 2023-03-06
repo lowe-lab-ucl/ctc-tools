@@ -115,3 +115,11 @@ def load_ctc(
     detections = detections_from_stack(stack)
     graph = load_graph(filepath)
     return detections, graph
+
+
+def load_images(
+    rootpath: os.PathLike, *, experiment: str = "01"
+) -> np.ndarray:
+    """Return the image data"""
+    filepath = Path(rootpath) / f"{experiment}" / "*.tif"
+    return imread(filepath)
