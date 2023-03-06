@@ -1,5 +1,4 @@
 # ctc-tools
-CTC tools
 
 ```python
 from ctctools import load_ctc
