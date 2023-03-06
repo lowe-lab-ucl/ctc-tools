@@ -83,8 +83,8 @@ def load_graph(filepath: os.PathLike) -> Dict[int, int]:
 
 
 def load_ctc(
-        rootpath: os.PathLike, *, experiment: str = "01"
-    ) -> tuple[pd.DataFrame, dict[int, int]]:
+    rootpath: os.PathLike, *, experiment: str = "01"
+) -> tuple[pd.DataFrame, dict[int, int]]:
     """Load a Cell Tracking Challenge dataset.
 
     Parameters 
