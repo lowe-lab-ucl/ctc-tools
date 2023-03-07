@@ -34,7 +34,7 @@ def _detections_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
         np.asarray(stack[idx, ...]), 
         properties=("label", "centroid")
     )
-    props["time"] = np.full(props["label"].shape, idx)
+    props["t"] = np.full(props["label"].shape, idx)
     return pd.DataFrame(props)
 
 
@@ -55,10 +55,10 @@ def detections_from_stack(stack: np.ndarray) -> pd.DataFrame:
         [_detections_from_image(stack, idx) for idx in range(stack.shape[0])]
     ).reset_index(drop=True)
     # sort the data lexicographically by track_id and time
-    data_df = data_df_raw.sort_values(["label", "time"], ignore_index=True)
+    data_df = data_df_raw.sort_values(["label", "t"], ignore_index=True)
     data_df = data_df.rename(
         columns={
-            "label": "ID", 
+            "label": "GT_ID", 
             "centroid-2": "z", 
             "centroid-1": "y", 
             "centroid-0": "x"
@@ -66,7 +66,7 @@ def detections_from_stack(stack: np.ndarray) -> pd.DataFrame:
     )
 
     # create the final data array: track_id, T, Z, Y, X
-    keys = ["ID", "time", "x", "y"] 
+    keys = ["GT_ID", "t", "x", "y"] 
     if "z" in data_df.keys():
         keys += ["z"]
 
