@@ -1,4 +1,6 @@
+from __future__ import annotations
 
+import dataclasses
 import os
 
 import numpy as np
@@ -6,16 +8,61 @@ import pandas as pd
 
 from pathlib import Path
 from skimage.measure import regionprops_table
-from typing import Dict, Union
+from typing import Dict, List, Optional
+import numpy.typing as npt
 
 # try to use dask, fall back to imageio
 try:
-    from dask_image.imread import imread
+    from dask.array.image import imread
 except ImportError:
     from skimage.io import imread
 
 
-def _detections_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
+@dataclasses.dataclass
+class CTCDataset:
+    """Cell Tracking Challenge dataset object."""
+    name: str 
+    path: os.PathLike 
+    experiment: str
+    _segmentation: Optional[npt.ArrayLike] = None
+    _images: Optional[npt.ArrayLike] = None
+    _nodes: Optional[pd.DataFrame] = None
+
+    @property 
+    def images(self) -> npt.ArrayLike:
+        if self._images is None: 
+            images_filepattern = str(Path(self.path) / f"{self.experiment}" / "*.tif")
+            self._images = imread(images_filepattern)
+        return self._images
+
+    @property 
+    def segmentation(self) -> npt.ArrayLike:
+        if self._segmentation is None:
+            filepath = Path(self.path) / f"{self.experiment}_GT/TRA" 
+            segmentation_filepattern = str(filepath / "*.tif")
+            self._segmentation = imread(segmentation_filepattern)
+        return self._segmentation
+
+    @property 
+    def nodes(self) -> pd.DataFrame:
+        if self._nodes is None:
+            self._nodes = _nodes_from_stack(self.segmentation)
+        return self._nodes
+    
+    @property 
+    def edges(self):
+        raise NotImplementedError
+
+    @property 
+    def graph(self) -> Dict[int, List[int]]:
+        """Return the lineage graph from the file."""
+        lbep = np.loadtxt(Path(self.path) / "man_track.txt", dtype=np.uint)
+        full_graph = dict(lbep[:, [0, 3]])
+        graph = {k: v for k, v in full_graph.items() if v != 0}
+        return graph
+
+
+def _nodes_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
     """Return the unique track label, centroid and time for each track vertex.
 
     Parameters
@@ -30,15 +77,13 @@ def _detections_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
     data_df : pd.DataFrame
        The dataframe of track data for one time step (specified by idx).
     """
-    props = regionprops_table(
-        np.asarray(stack[idx, ...]), 
-        properties=("label", "centroid")
-    )
+    frame = np.asarray(stack[idx, ...])
+    props = regionprops_table(frame, properties=("label", "centroid"))
     props["t"] = np.full(props["label"].shape, idx)
     return pd.DataFrame(props)
 
 
-def detections_from_stack(stack: np.ndarray) -> pd.DataFrame:
+def _nodes_from_stack(stack: npt.Array) -> pd.DataFrame:
     """Return detections from a stack.
     
     Parameters
@@ -52,16 +97,16 @@ def detections_from_stack(stack: np.ndarray) -> pd.DataFrame:
        The dataframe containing the track data.
     """
     data_df_raw = pd.concat(
-        [_detections_from_image(stack, idx) for idx in range(stack.shape[0])]
+        [_nodes_from_image(stack, idx) for idx in range(stack.shape[0])]
     ).reset_index(drop=True)
     # sort the data lexicographically by track_id and time
     data_df = data_df_raw.sort_values(["label", "t"], ignore_index=True)
     data_df = data_df.rename(
         columns={
             "label": "GT_ID", 
-            "centroid-2": "z", 
+            "centroid-2": "x", 
             "centroid-1": "y", 
-            "centroid-0": "x"
+            "centroid-0": "z"
         }
     )
 
@@ -74,52 +119,26 @@ def detections_from_stack(stack: np.ndarray) -> pd.DataFrame:
     return data
 
 
-def load_graph(filepath: os.PathLike) -> Dict[int, int]:
-    """Return the lineage graph from the file."""
-    lbep = np.loadtxt(filepath / "man_track.txt", dtype=np.uint)
-    full_graph = dict(lbep[:, [0, 3]])
-    graph = {k: v for k, v in full_graph.items() if v != 0}
-    return graph
-
-
-def load_ctc(
-    rootpath: os.PathLike, *, experiment: str = "01"
+def load(
+    path: os.PathLike, *, experiment: str = "01",
 ) -> tuple[pd.DataFrame, dict[int, int]]:
     """Load a Cell Tracking Challenge dataset.
 
     Parameters 
     ----------
-    root : path 
+    path :
         The path to the root of the dataset.
     experiment : str, default is "01"
         The particular experiment within the dataset.
 
     Returns
     -------
-    detections : dataframe 
-        A dataframe containing the ground truth centroids for each detection.
-    graph : dict
-        A dictionary containing the parent-child relationships derived from
-        the LBEP table. For example: {2: 1, 3: 1} indicates that tracks 2 and 3 
-        are children of track 1.
-
+    dataset :
+        An instance of a CTCDataSet containing
     Usage
     -----
-    >>> detections, graph = load_ctc(PATH, experiment=EXPERIMENT)
+    >>> dataset = load_ctc(PATH, experiment=EXPERIMENT)
     """
-    filepath = Path(rootpath) / f"{experiment}_GT/TRA"
-
-    segmentation_filepattern = filepath / "man_track*.tif"
-    stack = imread(segmentation_filepattern)
-
-    detections = detections_from_stack(stack)
-    graph = load_graph(filepath)
-    return detections, graph
-
-
-def load_images(
-    rootpath: os.PathLike, *, experiment: str = "01"
-) -> np.ndarray:
-    """Return the image data"""
-    filepath = Path(rootpath) / f"{experiment}" / "*.tif"
-    return imread(filepath)
+    dataset_path = Path(path)
+    name = dataset_path.stem
+    return CTCDataset(name=name, path=dataset_path, experiment=experiment)
