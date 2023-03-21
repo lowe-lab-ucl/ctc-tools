@@ -5,11 +5,12 @@ import os
 
 import numpy as np
 import pandas as pd
+import numpy.typing as npt
 
 from pathlib import Path
 from skimage.measure import regionprops_table
-from typing import Dict, List, Optional
-import numpy.typing as npt
+from typing import Dict, List, Optional, Tuple
+
 
 # try to use dask, fall back to imageio
 try:
@@ -24,6 +25,7 @@ class CTCDataset:
     name: str 
     path: os.PathLike 
     experiment: str
+    scale: Tuple[float] = dataclasses.field(default_factory=tuple)
     _segmentation: Optional[npt.ArrayLike] = None
     _images: Optional[npt.ArrayLike] = None
     _nodes: Optional[pd.DataFrame] = None
@@ -56,10 +58,18 @@ class CTCDataset:
     @property 
     def graph(self) -> Dict[int, List[int]]:
         """Return the lineage graph from the file."""
-        lbep = np.loadtxt(Path(self.path) / "man_track.txt", dtype=np.uint)
+        filepath = Path(self.path) / f"{self.experiment}_GT/TRA"
+        lbep = np.loadtxt(filepath / "man_track.txt", dtype=np.uint)
         full_graph = dict(lbep[:, [0, 3]])
         graph = {k: v for k, v in full_graph.items() if v != 0}
         return graph
+    
+    @property 
+    def volume(self) -> tuple:
+        dims = self.segmentation.shape[1:]
+        ndim = len(dims)
+        scaled_dims = [dims[idx]*self.scale[idx] for idx in range(ndim)]
+        return tuple(zip([0]*ndim, scaled_dims))
 
 
 def _nodes_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
@@ -101,26 +111,25 @@ def _nodes_from_stack(stack: npt.Array) -> pd.DataFrame:
     ).reset_index(drop=True)
     # sort the data lexicographically by track_id and time
     data_df = data_df_raw.sort_values(["label", "t"], ignore_index=True)
-    data_df = data_df.rename(
-        columns={
-            "label": "GT_ID", 
-            "centroid-2": "x", 
-            "centroid-1": "y", 
-            "centroid-0": "z"
-        }
-    )
+    rename_map={
+        "label": "GT_ID", 
+        "centroid-2": "x", 
+        "centroid-1": "y", 
+        "centroid-0": "z",
+    }
+    data_df = data_df.rename(columns=rename_map)
 
     # create the final data array: track_id, T, Z, Y, X
-    keys = ["GT_ID", "t", "x", "y"] 
-    if "z" in data_df.keys():
-        keys += ["z"]
+    keys = ["GT_ID", "t", "z", "y", "x"] 
+    if "z" not in data_df.keys():
+        keys.remove("z")
 
     data = data_df.loc[:, keys]
     return data
 
 
 def load(
-    path: os.PathLike, *, experiment: str = "01",
+    path: os.PathLike, **kwargs,
 ) -> tuple[pd.DataFrame, dict[int, int]]:
     """Load a Cell Tracking Challenge dataset.
 
@@ -141,4 +150,4 @@ def load(
     """
     dataset_path = Path(path)
     name = dataset_path.stem
-    return CTCDataset(name=name, path=dataset_path, experiment=experiment)
+    return CTCDataset(name=name, path=dataset_path, **kwargs)
