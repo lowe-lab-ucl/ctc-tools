@@ -8,7 +8,7 @@ Tools to help import CTC datasets.
 import ctctools
 
 # note: `scale` allows representation of anisotropy in the image data
-dataset = load("/path/to/data", experiment="01", scale=(1., 1., 1.))
+dataset = ctctools.load("/path/to/data", experiment="01", scale=(1., 1., 1.))
 ```
 
 and to visualize in napari:
