@@ -74,10 +74,15 @@ class CellTrackingChallengeDataset:
             self._edges += track_edges
 
         # now calculate the hypoeredges to add
-        for idj, idi in self.graph.items():
-            j = tracks.loc[idj].tolist()[0]
-            i = tracks.loc[idi].tolist()[-1]
-            self._edges.append((i, j))
+        hyperedges = [
+            (
+                tracks.loc[i].tolist()[-1],
+                tracks.loc[j].tolist()[0]
+            )
+            for j, i in self.graph.items()
+        ]
+
+        self._edges += hyperedges
         
         return self._edges
 
@@ -135,11 +140,19 @@ class CellTrackingChallengeDataset:
         return tuple(zip([0]*ndim, scaled_dims))
     
     @staticmethod 
-    def load(filepath: Path, **kwargs) -> CellTrackingChallengeDataset:
+    def load(
+        filepath: Path, 
+        experiment: str = "01", 
+        **kwargs
+    ) -> CellTrackingChallengeDataset:
         """Load a CTC dataset"""
         dataset_path = Path(filepath)
-        name = dataset_path.stem
-        return CellTrackingChallengeDataset(name=name, path=dataset_path, **kwargs)
+        return CellTrackingChallengeDataset(
+            name=dataset_path.stem, 
+            path=dataset_path, 
+            experiment=experiment, 
+            **kwargs
+        )
 
 
 def _nodes_from_image(stack: np.ndarray, idx: int) -> pd.DataFrame:
