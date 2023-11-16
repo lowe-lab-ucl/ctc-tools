@@ -1,6 +1,7 @@
 # ctc-tools
 
-Tools to help import CTC datasets.
+Python tools to help import [Cell Tracking Challenge](http://celltrackingchallenge.net/) datasets.
+
 
 ## Usage
 
@@ -24,3 +25,9 @@ viewer.add_tracks(
     name="GT tracks"
 )
 ```
+
+## Usage in Google Colab
+
+An example colab notebook is provided below.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1hB04DwJZJzT9i_yi_mm7p8vkgWPzbfUA?usp=sharing)
